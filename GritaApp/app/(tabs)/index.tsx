@@ -3,11 +3,12 @@ import { View, Text, StyleSheet, Animated } from "react-native";
 import Voice from "@react-native-voice/voice";
 
 const versos = [
-  "El viento me lleva",
-  "La noche me cubre",
-  "Palabras que explotan",
-  "Sombras que susurran",
-  "El tiempo se rompe",
+  "En la esquina del tiempo te espero",
+  "con palabras que no sabe el viento",
+  "tu nombre se queda en mi pecho",
+  "como un eco lento y sincero",
+  "y el mundo se olvida un momento."
+
 ];
 
 export default function App() {
