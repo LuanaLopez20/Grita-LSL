@@ -1,135 +1,104 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
-import { Audio } from 'expo-av';
+import React, { useEffect, useState, useRef } from "react";
+import { View, Text, StyleSheet, Animated } from "react-native";
+import Voice from "@react-native-voice/voice";
 
-const poema = [
+const versos = [
   "El viento me lleva",
   "La noche me cubre",
   "Palabras que explotan",
   "Sombras que susurran",
-  "El tiempo se rompe"
+  "El tiempo se rompe",
 ];
 
 export default function App() {
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const intervalRef = useRef<number | null>(null);
-
   const [versoActual, setVersoActual] = useState(0);
-
-  const scrollAnim = useRef(new Animated.Value(0)).current;
+  const animacionScroll = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    startRecording();
-
+    Voice.onSpeechResults = procesarVoz;
+    iniciarEscucha();
     return () => {
-      void stopRecording();
+      Voice.destroy().then(Voice.removeAllListeners);
     };
   }, []);
 
-  const startRecording = async () => {
-    if (recordingRef.current) return;
-
+  const iniciarEscucha = async () => {
     try {
-      const { granted } = await Audio.requestPermissionsAsync();
-      if (!granted) return;
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const recording = new Audio.Recording();
-
-      await recording.prepareToRecordAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
-      await recording.startAsync();
-      recordingRef.current = recording;
-
-      let lastTime = 0;
-
-      intervalRef.current = setInterval(async () => {
-        if (!recordingRef.current) return;
-
-        const status = await recordingRef.current.getStatusAsync();
-
-        // 👇 detecta "actividad" del mic (aunque no haya metering)
-        if (status.isRecording) {
-          const now = Date.now();
-
-          // si pasa tiempo + hay audio → sube verso
-          if (now - lastTime > 800) {
-            lastTime = now;
-
-            setVersoActual((prev) => {
-              const next = Math.min(prev + 1, poema.length);
-
-              Animated.spring(scrollAnim, {
-                toValue: -(next * 100),
-                useNativeDriver: true
-              }).start();
-
-              return next;
-            });
-          }
-        }
-      }, 300);
-
-    } catch (err) {
-      console.log("ERROR MIC:", err);
+      await Voice.start("es-AR"); 
+    } catch (error) {
+      console.log(error);
     }
   };
 
-  const stopRecording = async () => {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
+  const procesarVoz = (evento) => {
+    const textoDetectado = evento.value[0].toLowerCase();
+    console.log("Escuchado:", textoDetectado);
+    const indiceVerso = versos.findIndex((verso) =>
+      textoDetectado.includes(verso.split(" ")[0].toLowerCase())
+    );
 
-    if (recordingRef.current) {
-      try {
-        await recordingRef.current.stopAndUnloadAsync();
-      } catch {}
-      recordingRef.current = null;
+    if (indiceVerso !== -1) {
+      setVersoActual(indiceVerso + 1);
+      Animated.spring(animacionScroll, {
+        toValue: -(indiceVerso * 100),
+        useNativeDriver: true,
+      }).start();
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.titulo}>GRITA</Text>
-
-      <Animated.View style={{ transform: [{ translateY: scrollAnim }] }}>
-        {poema.map((linea, index) => (
-          <Text key={index} style={styles.linea}>
+    <View style={estilos.container}>
+      <Text style={estilos.titulo}>POEMA</Text>
+      <Animated.View style={{ transform: [{ translateY: animacionScroll }] }}>
+        {versos.map((linea, indice) => (
+          <Text
+            key={indice.toString()}
+            style={[
+              estilos.linea,
+              indice < versoActual ? estilos.visible : estilos.oculta
+            ]}
+          >
             {linea}
           </Text>
         ))}
+
       </Animated.View>
+
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const estilos = StyleSheet.create({
+
   container: {
     flex: 1,
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    padding: 20
+    backgroundColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    padding: 20,
   },
+
   titulo: {
     fontSize: 80,
-    fontWeight: 'bold',
-    color: '#f00',
-    textAlign: 'center',
-    marginVertical: 50
+    fontWeight: "bold",
+    color: "rgb(9, 92, 16)",
+    textAlign: "center",
+    marginVertical: 50,
   },
+
   linea: {
     fontSize: 28,
-    color: '#fff',
-    textAlign: 'center',
-    marginVertical: 40
-  }
+    textAlign: "center",
+    marginVertical: 40,
+  },
+
+  visible: {
+    color: "#ffffff",
+  },
+
+  oculta: {
+    color: "#000000",
+  },
+
 });
