@@ -12,42 +12,114 @@ const versos = [
   "y el mundo se olvida un momento."
 ];
 
+const colores = [
+  "#0B0C10",
+  "#1F2833",
+  "#2E4057",
+  "#3A506B",
+  "#5BC0BE",
+  "#C5C6C7"
+];
+
+// 🌌 partículas iniciales
+const generarParticulas = () =>
+  Array.from({ length: 35 }).map(() => ({
+    x: Math.random() * 400,
+    y: Math.random() * 800,
+    speed: 0.3 + Math.random() * 1.5,
+    size: 2 + Math.random() * 4,
+    opacity: 0.2 + Math.random() * 0.6,
+  }));
+
 export default function App() {
 
   const [versoActual, setVersoActual] = useState(0);
   const [grabando, setGrabando] = useState(false);
   const [tiempoGrabacion, setTiempoGrabacion] = useState(0);
+  const [textoAnimado, setTextoAnimado] = useState("");
 
   const animacionFade = useRef(new Animated.Value(1)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const grabacion = useRef(null);
   const timerRef = useRef(null);
 
+  const particulas = useRef(generarParticulas()).current;
+  const [, forceUpdate] = useState(0);
+
+  // 🌊 fondo + partículas loop
   useEffect(() => {
     pedirPermisos();
-  }, []);
+
+    // respiración fondo
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scaleAnim, {
+          toValue: 1.03,
+          duration: 2500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 2500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // movimiento partículas
+    const interval = setInterval(() => {
+      particulas.forEach((p) => {
+        p.y -= grabando ? p.speed * 3 : p.speed; // 🎤 reacción a voz
+
+        // reset
+        if (p.y < -10) {
+          p.y = 800;
+          p.x = Math.random() * 400;
+        }
+
+        // 🌌 movimiento tipo galaxia suave
+        p.x += Math.sin(p.y * 0.01) * 0.5;
+      });
+
+      forceUpdate((v) => v + 1);
+    }, 30);
+
+    return () => clearInterval(interval);
+
+  }, [grabando]);
 
   const pedirPermisos = async () => {
     await Audio.requestPermissionsAsync();
+  };
+
+  // ⌨️ máquina de escribir
+  const animarTexto = (texto) => {
+    setTextoAnimado("");
+
+    let i = 0;
+    const intervalo = setInterval(() => {
+      setTextoAnimado(texto.slice(0, i));
+      i++;
+
+      if (i > texto.length) clearInterval(intervalo);
+    }, 40);
   };
 
   const iniciarTimer = () => {
     setTiempoGrabacion(0);
 
     timerRef.current = setInterval(() => {
-      setTiempoGrabacion((prev) => prev + 1);
+      setTiempoGrabacion((p) => p + 1);
     }, 1000);
   };
 
   const detenerTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
+    if (timerRef.current) clearInterval(timerRef.current);
   };
 
   const iniciarEscucha = async () => {
     try {
-
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -62,25 +134,23 @@ export default function App() {
       setGrabando(true);
       iniciarTimer();
 
-    } catch (error) {
-      console.log(error);
+    } catch (e) {
+      console.log(e);
     }
   };
 
   const detenerEscucha = async () => {
     try {
-
       await grabacion.current.stopAndUnloadAsync();
 
       setGrabando(false);
       detenerTimer();
 
       const uri = grabacion.current.getURI();
-
       enviarAudio(uri);
 
-    } catch (error) {
-      console.log(error);
+    } catch (e) {
+      console.log(e);
     }
   };
 
@@ -109,55 +179,75 @@ export default function App() {
 
       procesarTexto(texto);
 
-    } catch (error) {
-      console.log(error);
+    } catch (e) {
+      console.log(e);
     }
   };
 
   const procesarTexto = (textoDetectado) => {
 
-  const texto = textoDetectado.toLowerCase();
+    const texto = textoDetectado.toLowerCase();
 
-  const indiceVerso = versos.findIndex((verso) => {
+    const indiceVerso = versos.findIndex((v) => {
+      const clave = v.toLowerCase().split(" ").slice(0, 3).join(" ");
+      return texto.includes(clave);
+    });
 
-    const palabrasClave = verso
-      .toLowerCase()
-      .split(" ")
-      .slice(0, 3) // toma las primeras 3 palabras
-      .join(" ");
+    if (indiceVerso !== -1) {
 
-    return texto.includes(palabrasClave);
+      Animated.sequence([
+        Animated.timing(animacionFade, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(animacionFade, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        })
+      ]).start();
 
-  });
+      setVersoActual(indiceVerso + 1);
+      animarTexto(versos[indiceVerso]);
+    }
+  };
 
-  if (indiceVerso !== -1) {
-
-    Animated.sequence([
-      Animated.timing(animacionFade, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(animacionFade, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      })
-    ]).start();
-
-    setVersoActual(indiceVerso + 1);
-
-  }
-};
-
-  const formatoTiempo = (segundos) => {
-    const min = String(Math.floor(segundos / 60)).padStart(2, "0");
-    const sec = String(segundos % 60).padStart(2, "0");
-    return `${min}:${sec}`;
+  const formatoTiempo = (s) => {
+    const m = String(Math.floor(s / 60)).padStart(2, "0");
+    const sec = String(s % 60).padStart(2, "0");
+    return `${m}:${sec}`;
   };
 
   return (
-    <View style={estilos.container}>
+    <Animated.View
+      style={[
+        estilos.container,
+        {
+          backgroundColor: colores[versoActual % colores.length],
+          transform: [{ scale: scaleAnim }]
+        }
+      ]}
+    >
+
+      {/* 🌌 PARTÍCULAS */}
+      <View style={StyleSheet.absoluteFill}>
+        {particulas.map((p, i) => (
+          <View
+            key={i}
+            style={{
+              position: "absolute",
+              left: p.x,
+              top: p.y,
+              width: p.size,
+              height: p.size,
+              borderRadius: 50,
+              backgroundColor: "white",
+              opacity: p.opacity,
+            }}
+          />
+        ))}
+      </View>
 
       <Text style={estilos.titulo}>POEMA</Text>
 
@@ -168,13 +258,9 @@ export default function App() {
       </Text>
 
       <Animated.View style={{ opacity: animacionFade }}>
-
         {versoActual > 0 && (
-          <Text style={[estilos.linea, estilos.visible]}>
-            {versos[versoActual - 1]}
-          </Text>
+          <Text style={estilos.linea}>{textoAnimado}</Text>
         )}
-
       </Animated.View>
 
       {!grabando ? (
@@ -183,7 +269,7 @@ export default function App() {
         <Button title="⏹ Detener grabación" onPress={detenerEscucha} />
       )}
 
-    </View>
+    </Animated.View>
   );
 }
 
@@ -191,17 +277,18 @@ const estilos = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: "#000",
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
+    overflow: "hidden"
   },
 
   titulo: {
     fontSize: 80,
     fontWeight: "bold",
-    color: "rgb(9, 92, 16)",
-    textAlign: "center",
+    color: "#fff",
+    textShadowColor: "rgba(255,255,255,0.3)",
+    textShadowRadius: 20,
     marginVertical: 50,
   },
 
@@ -216,10 +303,9 @@ const estilos = StyleSheet.create({
     fontSize: 32,
     textAlign: "center",
     marginVertical: 40,
-  },
-
-  visible: {
-    color: "#ffffff",
+    color: "#fff",
+    textShadowColor: "rgba(255,255,255,0.5)",
+    textShadowRadius: 15,
   },
 
 });
