@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View, Text, StyleSheet, Animated, Button } from "react-native";
+import { View, Text, StyleSheet, Animated } from "react-native";
 import { Audio } from "expo-av";
 
 const API_KEY = "a3b607ae808277af855a17a832e613e4ea01975d";
@@ -21,7 +21,6 @@ const colores = [
   "#C5C6C7"
 ];
 
-// 🌌 partículas iniciales
 const generarParticulas = () =>
   Array.from({ length: 35 }).map(() => ({
     x: Math.random() * 400,
@@ -43,15 +42,15 @@ export default function App() {
 
   const grabacion = useRef(null);
   const timerRef = useRef(null);
+  const cicloActivo = useRef(false);
 
   const particulas = useRef(generarParticulas()).current;
   const [, forceUpdate] = useState(0);
 
-  // 🌊 fondo + partículas loop
   useEffect(() => {
     pedirPermisos();
+    cicloEscucha();
 
-    // respiración fondo
     Animated.loop(
       Animated.sequence([
         Animated.timing(scaleAnim, {
@@ -67,59 +66,42 @@ export default function App() {
       ])
     ).start();
 
-    // movimiento partículas
     const interval = setInterval(() => {
-      particulas.forEach((p) => {
-        p.y -= grabando ? p.speed * 3 : p.speed; // 🎤 reacción a voz
 
-        // reset
+      particulas.forEach((p) => {
+        p.y -= p.speed * 2;
+
         if (p.y < -10) {
           p.y = 800;
           p.x = Math.random() * 400;
         }
 
-        // 🌌 movimiento tipo galaxia suave
         p.x += Math.sin(p.y * 0.01) * 0.5;
       });
 
-      forceUpdate((v) => v + 1);
+      forceUpdate(v => v + 1);
+
     }, 30);
 
     return () => clearInterval(interval);
 
-  }, [grabando]);
+  }, []);
 
   const pedirPermisos = async () => {
     await Audio.requestPermissionsAsync();
   };
 
-  // ⌨️ máquina de escribir
-  const animarTexto = (texto) => {
-    setTextoAnimado("");
+  const cicloEscucha = async () => {
+    if (cicloActivo.current) return;
+    cicloActivo.current = true;
 
-    let i = 0;
-    const intervalo = setInterval(() => {
-      setTextoAnimado(texto.slice(0, i));
-      i++;
+    const grabar = async () => {
 
-      if (i > texto.length) clearInterval(intervalo);
-    }, 40);
-  };
+      if (versoActual >= versos.length) {
+        cicloActivo.current = false;
+        return;
+      }
 
-  const iniciarTimer = () => {
-    setTiempoGrabacion(0);
-
-    timerRef.current = setInterval(() => {
-      setTiempoGrabacion((p) => p + 1);
-    }, 1000);
-  };
-
-  const detenerTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-  };
-
-  const iniciarEscucha = async () => {
-    try {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -132,26 +114,23 @@ export default function App() {
       grabacion.current = recording;
 
       setGrabando(true);
-      iniciarTimer();
 
-    } catch (e) {
-      console.log(e);
-    }
-  };
+      setTimeout(async () => {
 
-  const detenerEscucha = async () => {
-    try {
-      await grabacion.current.stopAndUnloadAsync();
+        await recording.stopAndUnloadAsync();
 
-      setGrabando(false);
-      detenerTimer();
+        setGrabando(false);
 
-      const uri = grabacion.current.getURI();
-      enviarAudio(uri);
+        const uri = recording.getURI();
+        await enviarAudio(uri);
 
-    } catch (e) {
-      console.log(e);
-    }
+        grabar();
+
+      }, 3000);
+
+    };
+
+    grabar();
   };
 
   const enviarAudio = async (uri) => {
@@ -213,10 +192,15 @@ export default function App() {
     }
   };
 
-  const formatoTiempo = (s) => {
-    const m = String(Math.floor(s / 60)).padStart(2, "0");
-    const sec = String(s % 60).padStart(2, "0");
-    return `${m}:${sec}`;
+  const animarTexto = (texto) => {
+    setTextoAnimado("");
+
+    let i = 0;
+    const intervalo = setInterval(() => {
+      setTextoAnimado(texto.slice(0, i));
+      i++;
+      if (i > texto.length) clearInterval(intervalo);
+    }, 40);
   };
 
   return (
@@ -230,7 +214,6 @@ export default function App() {
       ]}
     >
 
-      {/* 🌌 PARTÍCULAS */}
       <View style={StyleSheet.absoluteFill}>
         {particulas.map((p, i) => (
           <View
@@ -252,9 +235,7 @@ export default function App() {
       <Text style={estilos.titulo}>POEMA</Text>
 
       <Text style={estilos.estado}>
-        {grabando
-          ? `🔴 GRABANDO ${formatoTiempo(tiempoGrabacion)}`
-          : "Presione HABLAR"}
+        {grabando ? "🔴 ESCUCHANDO..." : "INICIANDO..."}
       </Text>
 
       <Animated.View style={{ opacity: animacionFade }}>
@@ -262,12 +243,6 @@ export default function App() {
           <Text style={estilos.linea}>{textoAnimado}</Text>
         )}
       </Animated.View>
-
-      {!grabando ? (
-        <Button title="🎤 Hablar" onPress={iniciarEscucha} />
-      ) : (
-        <Button title="⏹ Detener grabación" onPress={detenerEscucha} />
-      )}
 
     </Animated.View>
   );
