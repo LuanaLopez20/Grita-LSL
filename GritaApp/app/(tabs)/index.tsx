@@ -114,17 +114,15 @@ export default function App() {
 
       <Animated.View style={{ transform: [{ translateY: animacionScroll }] }}>
 
-        {versos.map((linea, indice) => (
-          <Text
-            key={indice}
-            style={[
-              estilos.linea,
-              indice < versoActual ? estilos.visible : estilos.oculta
-            ]}
-          >
-            {linea}
-          </Text>
-        ))}
+          {versos.map((linea, indice) => {
+    if (indice >= versoActual) return null;
+
+    return (
+      <Text key={indice} style={[estilos.linea, estilos.visible]}>
+        {linea}
+      </Text>
+    );
+  })}
 
       </Animated.View>
 
