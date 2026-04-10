@@ -13,9 +13,15 @@ const versos = [
 ];
 
 export default function App() {
+
   const [versoActual, setVersoActual] = useState(0);
-  const animacionScroll = useRef(new Animated.Value(0)).current;
+  const [grabando, setGrabando] = useState(false);
+  const [tiempoGrabacion, setTiempoGrabacion] = useState(0);
+
+  const animacionFade = useRef(new Animated.Value(1)).current;
+
   const grabacion = useRef(null);
+  const timerRef = useRef(null);
 
   useEffect(() => {
     pedirPermisos();
@@ -25,8 +31,23 @@ export default function App() {
     await Audio.requestPermissionsAsync();
   };
 
+  const iniciarTimer = () => {
+    setTiempoGrabacion(0);
+
+    timerRef.current = setInterval(() => {
+      setTiempoGrabacion((prev) => prev + 1);
+    }, 1000);
+  };
+
+  const detenerTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+  };
+
   const iniciarEscucha = async () => {
     try {
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -38,7 +59,9 @@ export default function App() {
 
       grabacion.current = recording;
 
-      console.log("🎤 Grabando...");
+      setGrabando(true);
+      iniciarTimer();
+
     } catch (error) {
       console.log(error);
     }
@@ -46,11 +69,13 @@ export default function App() {
 
   const detenerEscucha = async () => {
     try {
+
       await grabacion.current.stopAndUnloadAsync();
 
-      const uri = grabacion.current.getURI();
+      setGrabando(false);
+      detenerTimer();
 
-      console.log("Audio:", uri);
+      const uri = grabacion.current.getURI();
 
       enviarAudio(uri);
 
@@ -61,6 +86,7 @@ export default function App() {
 
   const enviarAudio = async (uri) => {
     try {
+
       const audio = await fetch(uri);
       const buffer = await audio.arrayBuffer();
 
@@ -81,8 +107,6 @@ export default function App() {
       const texto =
         data.results.channels[0].alternatives[0].transcript;
 
-      console.log("Escuchado:", texto);
-
       procesarTexto(texto);
 
     } catch (error) {
@@ -91,20 +115,45 @@ export default function App() {
   };
 
   const procesarTexto = (textoDetectado) => {
-    const texto = textoDetectado.toLowerCase();
 
-    const indiceVerso = versos.findIndex((verso) =>
-      texto.includes(verso.split(" ")[0].toLowerCase())
-    );
+  const texto = textoDetectado.toLowerCase();
 
-    if (indiceVerso !== -1) {
-      setVersoActual(indiceVerso + 1);
+  const indiceVerso = versos.findIndex((verso) => {
 
-      Animated.spring(animacionScroll, {
-        toValue: -(indiceVerso * 100),
+    const palabrasClave = verso
+      .toLowerCase()
+      .split(" ")
+      .slice(0, 3) // toma las primeras 3 palabras
+      .join(" ");
+
+    return texto.includes(palabrasClave);
+
+  });
+
+  if (indiceVerso !== -1) {
+
+    Animated.sequence([
+      Animated.timing(animacionFade, {
+        toValue: 0,
+        duration: 300,
         useNativeDriver: true,
-      }).start();
-    }
+      }),
+      Animated.timing(animacionFade, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      })
+    ]).start();
+
+    setVersoActual(indiceVerso + 1);
+
+  }
+};
+
+  const formatoTiempo = (segundos) => {
+    const min = String(Math.floor(segundos / 60)).padStart(2, "0");
+    const sec = String(segundos % 60).padStart(2, "0");
+    return `${min}:${sec}`;
   };
 
   return (
@@ -112,22 +161,27 @@ export default function App() {
 
       <Text style={estilos.titulo}>POEMA</Text>
 
-      <Animated.View style={{ transform: [{ translateY: animacionScroll }] }}>
-
-          {versos.map((linea, indice) => {
-    if (indice >= versoActual) return null;
-
-    return (
-      <Text key={indice} style={[estilos.linea, estilos.visible]}>
-        {linea}
+      <Text style={estilos.estado}>
+        {grabando
+          ? `🔴 GRABANDO ${formatoTiempo(tiempoGrabacion)}`
+          : "Presione HABLAR"}
       </Text>
-    );
-  })}
+
+      <Animated.View style={{ opacity: animacionFade }}>
+
+        {versoActual > 0 && (
+          <Text style={[estilos.linea, estilos.visible]}>
+            {versos[versoActual - 1]}
+          </Text>
+        )}
 
       </Animated.View>
 
-      <Button title="🎤 Hablar" onPress={iniciarEscucha} />
-      <Button title="⏹ Detener" onPress={detenerEscucha} />
+      {!grabando ? (
+        <Button title="🎤 Hablar" onPress={iniciarEscucha} />
+      ) : (
+        <Button title="⏹ Detener grabación" onPress={detenerEscucha} />
+      )}
 
     </View>
   );
@@ -151,18 +205,21 @@ const estilos = StyleSheet.create({
     marginVertical: 50,
   },
 
+  estado: {
+    color: "red",
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 30,
+  },
+
   linea: {
-    fontSize: 28,
+    fontSize: 32,
     textAlign: "center",
     marginVertical: 40,
   },
 
-visible: {
-  color: "#ffffff",
-},
-
-oculta: {
-  color: "rgba(255,255,255,0.2)",
-},
+  visible: {
+    color: "#ffffff",
+  },
 
 });
