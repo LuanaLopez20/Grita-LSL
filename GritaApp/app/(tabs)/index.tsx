@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View, Text, StyleSheet, Animated } from "react-native";
-import Voice from "@react-native-voice/voice";
+import { View, Text, StyleSheet, Animated, Button } from "react-native";
+import { Audio } from "expo-av";
+
+const API_KEY = "a3b607ae808277af855a17a832e613e4ea01975d";
 
 const versos = [
   "En la esquina del tiempo te espero",
@@ -8,38 +10,96 @@ const versos = [
   "tu nombre se queda en mi pecho",
   "como un eco lento y sincero",
   "y el mundo se olvida un momento."
-
 ];
 
 export default function App() {
   const [versoActual, setVersoActual] = useState(0);
   const animacionScroll = useRef(new Animated.Value(0)).current;
+  const grabacion = useRef(null);
 
   useEffect(() => {
-    Voice.onSpeechResults = procesarVoz;
-    iniciarEscucha();
-    return () => {
-      Voice.destroy().then(Voice.removeAllListeners);
-    };
+    pedirPermisos();
   }, []);
+
+  const pedirPermisos = async () => {
+    await Audio.requestPermissionsAsync();
+  };
 
   const iniciarEscucha = async () => {
     try {
-      await Voice.start("es-AR"); 
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      grabacion.current = recording;
+
+      console.log("🎤 Grabando...");
     } catch (error) {
       console.log(error);
     }
   };
 
-  const procesarVoz = (evento) => {
-    const textoDetectado = evento.value[0].toLowerCase();
-    console.log("Escuchado:", textoDetectado);
+  const detenerEscucha = async () => {
+    try {
+      await grabacion.current.stopAndUnloadAsync();
+
+      const uri = grabacion.current.getURI();
+
+      console.log("Audio:", uri);
+
+      enviarAudio(uri);
+
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const enviarAudio = async (uri) => {
+    try {
+      const audio = await fetch(uri);
+      const buffer = await audio.arrayBuffer();
+
+      const respuesta = await fetch(
+        "https://api.deepgram.com/v1/listen?model=nova-2&language=es",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Token ${API_KEY}`,
+            "Content-Type": "audio/wav",
+          },
+          body: buffer,
+        }
+      );
+
+      const data = await respuesta.json();
+
+      const texto =
+        data.results.channels[0].alternatives[0].transcript;
+
+      console.log("Escuchado:", texto);
+
+      procesarTexto(texto);
+
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const procesarTexto = (textoDetectado) => {
+    const texto = textoDetectado.toLowerCase();
+
     const indiceVerso = versos.findIndex((verso) =>
-      textoDetectado.includes(verso.split(" ")[0].toLowerCase())
+      texto.includes(verso.split(" ")[0].toLowerCase())
     );
 
     if (indiceVerso !== -1) {
       setVersoActual(indiceVerso + 1);
+
       Animated.spring(animacionScroll, {
         toValue: -(indiceVerso * 100),
         useNativeDriver: true,
@@ -49,11 +109,14 @@ export default function App() {
 
   return (
     <View style={estilos.container}>
+
       <Text style={estilos.titulo}>POEMA</Text>
+
       <Animated.View style={{ transform: [{ translateY: animacionScroll }] }}>
+
         {versos.map((linea, indice) => (
           <Text
-            key={indice.toString()}
+            key={indice}
             style={[
               estilos.linea,
               indice < versoActual ? estilos.visible : estilos.oculta
@@ -64,6 +127,9 @@ export default function App() {
         ))}
 
       </Animated.View>
+
+      <Button title="🎤 Hablar" onPress={iniciarEscucha} />
+      <Button title="⏹ Detener" onPress={detenerEscucha} />
 
     </View>
   );
@@ -76,7 +142,6 @@ const estilos = StyleSheet.create({
     backgroundColor: "#000",
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
     padding: 20,
   },
 
@@ -94,12 +159,12 @@ const estilos = StyleSheet.create({
     marginVertical: 40,
   },
 
-  visible: {
-    color: "#ffffff",
-  },
+visible: {
+  color: "#ffffff",
+},
 
-  oculta: {
-    color: "#000000",
-  },
+oculta: {
+  color: "rgba(255,255,255,0.2)",
+},
 
 });
